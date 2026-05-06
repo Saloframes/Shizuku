@@ -51,6 +51,7 @@ import rikka.hidden.compat.PackageManagerApis;
 import rikka.hidden.compat.PermissionManagerApis;
 import rikka.hidden.compat.UserManagerApis;
 import rikka.parcelablelist.ParcelableListSlice;
+import rikka.shizuku.common.util.InstalledPackagesCompat;
 import rikka.rish.RishConfig;
 import rikka.shizuku.ShizukuApiConstants;
 import rikka.shizuku.server.api.IContentProviderUtils;
@@ -429,7 +430,7 @@ public class ShizukuService extends Service<ShizukuUserServiceManager, ShizukuCl
         }
 
         for (int user : users) {
-            for (PackageInfo pi : PackageManagerApis.getInstalledPackagesNoThrow(PackageManager.GET_META_DATA | PackageManager.GET_PERMISSIONS, user)) {
+            for (PackageInfo pi : InstalledPackagesCompat.getInstalledPackagesNoThrow(PackageManager.GET_META_DATA | PackageManager.GET_PERMISSIONS, user)) {
                 if (Objects.equals(MANAGER_APPLICATION_ID, pi.packageName)) continue;
                 if (pi.applicationInfo == null) continue;
 
@@ -479,7 +480,7 @@ public class ShizukuService extends Service<ShizukuUserServiceManager, ShizukuCl
     private static void sendBinderToClient(Binder binder, int userId) {
         try {
             Stream<PackageInfo> packages =
-                PackageManagerApis.getInstalledPackagesNoThrow(
+                InstalledPackagesCompat.getInstalledPackagesNoThrow(
                     PackageManager.GET_PERMISSIONS, userId
                 )
                 .stream()
