@@ -51,8 +51,35 @@ class AdbStartWorker(context: Context, params: WorkerParameters) : CoroutineWork
             val cr = applicationContext.contentResolver
             val enableWirelessDebugging = inputData.getBoolean(KEY_ENABLE_WIFI, true)
 
-            Settings.Global.putInt(cr, Settings.Global.ADB_ENABLED, 1)
-            Settings.Global.putLong(cr, "adb_allowed_connection_time", 0L)
+            val wirelessAlreadyEnabled = Settings.Global.getInt(cr, "adb_wifi_enabled", 0) == 1
+            val usbAlreadyEnabled = Settings.Global.getInt(cr, Settings.Global.ADB_ENABLED, 0) == 1
+
+            if (usbAlreadyEnabled) {
+                // USB is already on — reset connection time and proceed via USB path.
+                Settings.Global.putLong(cr, "adb_allowed_connection_time", 0L)
+            } else if (wirelessAlreadyEnabled) {
+                // USB is off, wireless is already active. Writing adb_wifi_enabled=1
+                // again would be a no-op (SettingsProvider won't notify on same value),
+                // so adbd never reinitializes wireless and mDNS discovery finds nothing.
+                // Write 0 first so the callbackFlow's re-enable is a real 0→1 change,
+                // forcing adbd to restart wireless and emit a fresh mDNS announcement.
+                Settings.Global.putInt(cr, "adb_wifi_enabled", 0)
+                try {
+                    delay(200)
+                } finally {
+                    // Restore wireless unconditionally: in normal flow the callbackFlow
+                    // below also writes 1 (harmless no-op); on cancellation this prevents
+                    // leaving wireless disabled when the worker is stopped mid-cycle.
+                    Settings.Global.putInt(cr, "adb_wifi_enabled", 1)
+                }
+            } else if (!enableWirelessDebugging) {
+                // Neither is on and wireless is not requested — fall back to USB.
+                Settings.Global.putInt(cr, Settings.Global.ADB_ENABLED, 1)
+                Settings.Global.putLong(cr, "adb_allowed_connection_time", 0L)
+            }
+            // else: neither is on but enableWirelessDebugging=true (e.g. Watchdog restart after
+            // adb_wifi_enabled was reset by the system) — do not touch USB; let the callbackFlow
+            // below write adb_wifi_enabled=1 so the restart proceeds over wireless only.
 
             val tcpPort = EnvironmentUtils.getAdbTcpPort()
             if (tcpPort > 0 && !ShizukuSettings.getTcpMode()) {
